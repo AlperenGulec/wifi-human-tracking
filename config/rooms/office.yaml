@@ -1,0 +1,28 @@
+# Example room config. Copy and adjust per room.
+room: office
+dimensions_m: [3.0, 4.0]
+
+# 4 zones + empty. Coordinates are floor-plane metres, origin at one corner.
+zones:
+  - id: 0
+    name: zone_nw
+    bounds: [[0.0, 2.0], [1.5, 4.0]]
+  - id: 1
+    name: zone_ne
+    bounds: [[1.5, 2.0], [3.0, 4.0]]
+  - id: 2
+    name: zone_sw
+    bounds: [[0.0, 0.0], [1.5, 2.0]]
+  - id: 3
+    name: zone_se
+    bounds: [[1.5, 0.0], [3.0, 2.0]]
+
+nodes:
+  esp32_tx: {position_m: [0.2, 0.2], height_m: 1.8}
+  esp32_rx: {position_m: [2.8, 3.8], height_m: 1.8}
+
+camera:
+  position_m: [1.5, 4.0]
+  height_m: 2.2
+  # homography image points and matching floor points, filled in during calibration
+  homography_points: []

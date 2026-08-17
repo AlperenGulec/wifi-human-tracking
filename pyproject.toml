@@ -1,0 +1,15 @@
+[project]
+name = "wifi-tracking"
+version = "0.1.0"
+description = "PC-side pipeline for Wi-Fi CSI indoor human tracking"
+requires-python = ">=3.10"
+dependencies = [
+    # add as needed: numpy, pandas, opencv-python, scikit-learn, pyyaml
+]
+
+[tool.setuptools.packages.find]
+include = ["pc*"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

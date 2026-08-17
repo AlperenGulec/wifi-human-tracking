@@ -1,0 +1,44 @@
+# Generated data - everything except placeholders
+data/raw/*
+data/processed/*
+data/models/*
+data/results/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/models/.gitkeep
+!data/results/.gitkeep
+!data/README.md
+
+# ESP-IDF
+esp32/**/build/
+esp32/**/sdkconfig
+esp32/**/sdkconfig.old
+esp32/**/managed_components/
+esp32/**/dependencies.lock
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+*.egg-info/
+
+# Models and media
+*.npz
+*.h264
+*.mp4
+*.pt
+*.pth
+*.onnx
+
+# Yocto build output (build tree lives outside the repo; only recipes committed)
+raspberry-pi/yocto/build/
+raspberry-pi/yocto/sstate-cache/
+raspberry-pi/yocto/downloads/
+raspberry-pi/yocto/tmp/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
