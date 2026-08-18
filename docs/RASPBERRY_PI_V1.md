@@ -160,49 +160,13 @@ being streamed.
 
 ## Yocto configuration
 
-**Layers** (keep all on the same branch, e.g. scarthgap LTS):
+**See [YOCTO_BUILD.md](YOCTO_BUILD.md) for step-by-step host setup and build commands.**
 
-```
-poky/meta, meta-poky, meta-yocto-bsp
-meta-raspberrypi
-meta-openembedded/meta-oe
-meta-openembedded/meta-python
-meta-openembedded/meta-multimedia     <- required, see below
-```
+This section covers the high-level configuration needed. Key settings:
 
-`meta-multimedia` is not optional. The camera recipe `rpi-libcamera-apps` lives in
-meta-raspberrypi's `dynamic-layers/multimedia-layer/`, so it is invisible without it.
-This is the usual reason people report "the libcamera-apps recipe does not exist".
-Note the name is `rpi-libcamera-apps`, not `libcamera-apps`.
-
-**local.conf:**
-
-```
-MACHINE = "raspberrypi2"
-RASPBERRYPI_CAMERA_V2 = "1"        # adds dtoverlay=imx219 + CMA
-IMAGE_INSTALL:append = " rpi-libcamera-apps kernel-modules csi-logger esp32-udev"
-KERNEL_MODULE_AUTOLOAD:append = " cp210x ch341"
-```
-
-`csi-logger` and `esp32-udev` are our own recipes (the C logger plus scripts, and the
-udev rule).
-
-**Not needed** - keep them out: `userland`, `raspi-gpio`, `gstreamer1.0*`, `python3`,
-`python3-pyserial`. Add `v4l-utils` temporarily for bring-up, then drop it.
-
-Do not hand-edit `config.txt`. `RASPBERRYPI_CAMERA_V2` generates what is needed; use
-`RPI_EXTRA_CONFIG` if anything else is ever required.
-
-**Known Yocto traps:**
-
-- **"Illegal Instruction" on ARMv7.** An older `rpi-libcamera-apps` recipe forced
-  `LIBCAMERA_ARCH:arm = "armv8-neon"`, which emits ARMv8 NEON instructions that crash
-  the Pi 2's Cortex-A7. Fixed upstream in 2023. If you pin an old layer, remove that
-  line in a bbappend.
-- "No cameras available" is almost always a wrong or missing overlay, or a half-enabled
-  legacy stack. Check the generated config.txt for `dtoverlay=imx219` and no `start_x`.
-- Some branches have had packaging QA failures for libcamera-apps. Confirm
-  `rpi-libcamera-apps` builds cleanly *before* adding our own recipes on top.
+- `MACHINE = "raspberrypi2"`
+- `RASPBERRYPI_CAMERA_V2 = "1"`
+- Layers: poky, meta-raspberrypi, meta-oe, meta-python, meta-multimedia
 
 ## Bring-up checklist
 

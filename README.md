@@ -64,6 +64,7 @@ The Pi only records and timestamps. All vision and machine learning run on a PC.
 | [docs/RASPBERRY_PI_V1.md](docs/RASPBERRY_PI_V1.md) | Pi logger, camera, clock model, Yocto config |
 | [docs/DATA_FORMAT.md](docs/DATA_FORMAT.md) | File formats and labeling |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Stages and go/no-go gates |
+| [docs/YOCTO_BUILD.md](docs/YOCTO_BUILD.md) | For step-by-step host setup and build commands |
 
 ## Expected results
 
