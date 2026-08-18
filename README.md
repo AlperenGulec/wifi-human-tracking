@@ -63,6 +63,8 @@ The Pi only records and timestamps. All vision and machine learning run on a PC.
 | [docs/ESP32_V1.md](docs/ESP32_V1.md) | ESP32 firmware decisions and bring-up |
 | [docs/RASPBERRY_PI_V1.md](docs/RASPBERRY_PI_V1.md) | Pi logger, camera, clock model, Yocto config |
 | [docs/DATA_FORMAT.md](docs/DATA_FORMAT.md) | File formats and labeling |
+| [docs/LABELING_V1.md](docs/LABELING_V1.md) | PC-side ground-truth labeling (video -> x,y -> zone) |
+| [docs/CSI_PROCESSING_V1.md](docs/CSI_PROCESSING_V1.md) | CSI parsing, features, model, and evaluation design |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Stages and go/no-go gates |
 | [docs/YOCTO_BUILD.md](docs/YOCTO_BUILD.md) | For step-by-step host setup and build commands |
 
