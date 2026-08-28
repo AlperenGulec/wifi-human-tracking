@@ -4,13 +4,36 @@ Each stage has a gate. Do not start the next stage until the gate passes.
 
 ## Stage 1 - Prove CSI is real *(current)*
 
-Fork ESP32-CSI-Tool, flash TX and RX, get CSI onto the serial port.
+Write TX and RX firmware ourselves, flash both, get CSI onto the serial port.
 
-- [ ] Both boards build and flash on IDF v4.4
+**See [ESP32_V1.md](ESP32_V1.md) for the full firmware design.**
+
+### Toolchain setup
+
+- [ ] ESP-IDF `release/v5.5` cloned and `install.sh esp32` run
+- [ ] `export.sh` works in a fresh shell; no IDE involved
+- [ ] `sdkconfig.defaults` committed for both projects
+- [ ] Generated `sdkconfig` confirmed to contain `CONFIG_ESP_WIFI_CSI_ENABLED=y`
+- [ ] Exact IDF `git describe` recorded
+
+### Firmware
+
+- [ ] TX written: STA mode, connects to RX SoftAP, `WIFI_PS_NONE`, UDP send loop
+      driven by `vTaskDelayUntil` at 20 ms
+- [ ] RX written: SoftAP, CSI config set, callback does memcpy + barrier + index bump
+      into the ring buffer only
+- [ ] RX consumer loop in `app_main`, pinned to core 1, `uart_write_bytes` with a
+      TX ring buffer, hand-rolled int8-to-ASCII
+- [ ] IDF logging silenced on the RX so it cannot corrupt the CSV stream
+- [ ] `dropped` counter emitted so ring overflow is visible, not silent
+
+### Bring-up
+
+- [ ] Both boards build and flash
 - [ ] TX associates to the RX SoftAP
 - [ ] CSI lines appear at 921600 baud
 - [ ] `sig_mode == 1`, `len == 256`
-- [ ] ~50 lines/s, no sequence gaps
+- [ ] ~50 lines/s, no sequence gaps, `dropped` stays at 0
 - [ ] Amplitude curve deforms when you walk between the boards
 
 **Gate:** the walk test produces a clear, repeatable change. If the signal looks like
@@ -26,6 +49,7 @@ Pi-side logging and camera recording; PC-side video labeling and ground-truth ge
 ### Pi side (logging and recording)
 
 - [ ] Pi reads serial, timestamps on arrival with `CLOCK_MONOTONIC`, writes `csi.csv`
+- [ ] Logger drops any line not starting with the configured `node_id`
 - [ ] Pi records 1280x720 H.264 video at 10 fps with hardware encoding via rpicam-vid
 - [ ] rpicam-vid `--save-pts` produces microsecond timestamps; converted to `frames.csv` with frame_id
 - [ ] Yocto image built successfully with core-image-minimal + libcamera + rpicam-apps
@@ -144,5 +168,5 @@ Only after the earlier stages hold up.
 | Zone accuracy stuck below 70% | Fewer zones, or add the second link |
 | Cross-session accuracy collapses | Collect more varied data, revisit features, lean on std-based (drift-stable) features |
 | Yocto camera integration blocks progress | Record encoded video only, do all vision on the PC |
-| ESP32 CSI quality is the ceiling | Consider ESP32-C6 boards |
+| ESP32 CSI quality is the ceiling | Consider ESP32-C6 boards (note: different CSI config struct, firmware needs porting) |
 | Model does not beat RSSI-only baseline | Recheck CSI parsing and AGC rescaling before touching the model |
