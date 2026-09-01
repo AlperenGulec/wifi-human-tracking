@@ -135,7 +135,9 @@ committed, so a fresh clone builds identically with no interactive step.
 
 ## sdkconfig.defaults
 
-Shared by both projects, plus notes on why each line exists.
+Shared by both projects, plus notes on why each line exists. One exception:
+`CONFIG_ESP_CONSOLE_UART_BAUDRATE` is `460800` on RX and `921600` on TX — see
+below.
 
 ```
 CONFIG_IDF_TARGET="esp32"
@@ -150,7 +152,7 @@ CONFIG_ESP_WIFI_CSI_ENABLED=y
 CONFIG_ESP_MAIN_TASK_AFFINITY_CPU1=y
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144
 
-CONFIG_ESP_CONSOLE_UART_BAUDRATE=921600
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=921600   # RX: 460800 - see "Serial output"
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 ```
@@ -329,13 +331,23 @@ the PC so we keep the raw values and can change the rescaling method later.
 Byte layout: each subcarrier is 2 bytes, **imaginary first, then real**.
 Field order: LLTF, HT-LTF, STBC-HT-LTF.
 
-Expected lengths:
+Expected lengths, as the **driver** reports them (`info->len`, before any RX-side
+truncation):
 
-| `len` | Meaning |
+| `info->len` | Meaning |
 |---|---|
 | 256 | HT20. What we want. |
 | 128 | Legacy/non-HT frame. **Rate fell back to 1 Mbps. Fix this.** |
 | 384 / 612 | HT40 or STBC variants. Not expected here. |
+
+**This table is about `info->len`, not the `len` column you actually see in the
+CSV.** With `LLTF_ONLY` on (the current default — see "Serial output"), RX
+truncates every record to 128 bytes before it ever reaches the wire, so the CSV's
+`len` column reads **128 on every single line**, always, regardless of what
+`info->len` actually was. The CSV `len` field can no longer distinguish "normal
+LLTF-only truncation" from "rate genuinely fell back" — only `sig_mode` can:
+`1` means HT (good), `0` means the rate actually fell back (bad). See the
+bring-up checklist and failure modes below.
 
 `first_word_invalid` is forwarded in the CSV and handled on the PC, not here.
 
@@ -348,13 +360,24 @@ Selection happens on the PC, so it can be retuned without reflashing.
 
 ## Serial output
 
-- **Baud: 921600.** Reliable on both CP2102 and CH340 bridges. Higher rates
-  (1.5M, 2M) work on good hardware but are flaky.
-- **CSV, not binary.** A 256-value line runs ~870 B, so 50 pps is ~44 KB/s of a
-  ~92 KB/s link — roughly half, with enough headroom that CSV stays worth its
-  debuggability. Switch to binary only past ~100 pps. If the link does get
-  tight, set `LLTF_ONLY` in `config.h` first: it halves the line and V1 uses
-  nothing but LLTF on the PC anyway.
+- **Baud: 460800 to the Pi, RX only.** Not 921600 — that was the original
+  choice and it **is** reliable from a PC (Milestone 1 ran extended CH340
+  captures over it with zero unparsable lines), but the Raspberry Pi 2's Linux
+  `ch341` driver drops bytes at 921600, specifically sometimes the line's own
+  `\n`, at up to a ~60% rate in testing. A raw `stty`+`head` capture that
+  bypasses this project's own code entirely reproduced the same loss, and
+  removing other USB traffic (disconnecting Ethernet, which shares the Pi 2's
+  internal USB hub with its onboard "Ethernet") made no difference — so it is
+  not contention, and not our code. Dropping to 460800 cut the loss to ~10%.
+  See the failure modes table. TX's own console baud is unaffected — TX has no
+  CSV data path, its serial only carries IDF debug logs to a PC.
+- **`LLTF_ONLY` is on, permanently, alongside the baud change.** Not because it
+  fixed the corruption on its own (tested in isolation at 921600, it did not —
+  loss got worse, not better) but because it halves an already-tight link and
+  V1 uses nothing but LLTF on the PC anyway. A 128-value line runs ~450 B, so
+  50 pps is ~22.5 KB/s of a ~46 KB/s link. Both changes shipped together as the
+  tested combination, not attributed individually.
+- **CSV, not binary.** Switch to binary only past ~100 pps.
 - Include a **sequence counter** and the **local microsecond timestamp** in every
   record, even though the Pi timestamps on arrival. Gaps in the sequence tell us
   where packets are being lost.
@@ -386,29 +409,36 @@ Plain `#define`s. No Kconfig, no menuconfig.
 1. `. export.sh`, build and flash both boards on v5.5. Confirm the TX associates
    to the RX SoftAP.
 2. Confirm `CONFIG_ESP_WIFI_CSI_ENABLED=y` in the generated `sdkconfig`.
-3. Confirm CSI lines appear on the RX serial at 921600.
-4. Check metadata: `sig_mode == 1`, bandwidth == 0, `len == 256`.
-   **If `len == 128`, stop and fix the rate fallback first.**
+3. Confirm CSI lines appear on the RX serial at 460800 (from a PC directly,
+   921600 also works — see "Serial output" for why the Pi is different).
+4. Check metadata: `sig_mode == 1`, bandwidth == 0. **`len` is always 128 now**
+   (`LLTF_ONLY`, on by default) — that is expected, not a fault. If `sig_mode`
+   reads `0`, the rate genuinely fell back; stop and fix that.
 5. Check rate and loss: about 50 lines/s, no gaps in the sequence counter,
-   `dropped` staying at 0, stable RSSI.
+   `dropped` staying at 0, stable RSSI. On the Pi specifically, also expect a
+   small (~10%) rate of malformed/merged lines that `pc/csi/parse.py` rejects
+   cleanly — see the failure modes table. That is a known, accepted residual,
+   not something to chase further.
 6. Plot the 52 amplitudes with an empty room. Expect a smooth, structured curve.
 7. Walk through each zone. The curve should deform clearly and repeatably.
 
 ## Go / no-go signal
 
-**Go:** a steady ~50 lines/s of `sig_mode==1, len==256` records whose amplitude
-curve is smooth and roughly stable in an empty room, and visibly changes when you
-walk.
+**Go:** a steady ~50 lines/s of `sig_mode==1` records (via a PC directly, or
+via the Pi with the expected ~10% clean-rejected residual — see failure modes)
+whose amplitude curve is smooth and roughly stable in an empty room, and
+visibly changes when you walk.
 
-**No-go:** flat zeros, identical records every time, or `len == 128`.
+**No-go:** flat zeros, identical records every time, or `sig_mode == 0`.
 
 ## Failure modes
 
 | Symptom | Cause | Fix |
 |---|---|---|
 | No CSI lines at all, everything else fine | `CONFIG_ESP_WIFI_CSI_ENABLED` renamed and silently ignored | check the generated `sdkconfig`, `idf.py fullclean` |
-| `len == 128` | Rate fell back to 1 Mbps | Confirm the TX is actually associated |
+| `sig_mode == 0` | Rate fell back to 1 Mbps | Confirm the TX is actually associated |
 | All-zero or constant CSI | TX not transmitting, or wrong channel | Check channel match and association |
+| Some lines on the Pi merge two records into one (field count much higher than 11, e.g. 20, 29...) at ~10% rate | Raspberry Pi 2's Linux `ch341` USB-serial driver drops bytes at high baud — confirmed via a raw `stty`+`head` capture bypassing all of this project's code; not fixed by removing other USB traffic or by data volume alone | Already mitigated: 460800 baud (was 921600) + `LLTF_ONLY`. Residual ~10% is cleanly rejected by `pc/csi/parse.py`'s field-count/length check, same as any other malformed packet — not a data-quality problem, just a modest rate loss. From a PC directly (not the Pi), 921600 has never shown this. |
 | Occasional garbled / half-written record | missing memory barrier in the callback | `__sync_synchronize()` before publishing `head` |
 | `dropped` climbing | consumer too slow, or `printf` used instead of `uart_write_bytes` | fix the write path before enlarging the ring |
 | Log text mixed into CSV | IDF logging left on | `esp_log_level_set("*", ESP_LOG_NONE)`, and filter by node_id on the Pi |

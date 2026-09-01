@@ -155,7 +155,13 @@ def main() -> int:
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument("--port", help="serial port of the RX board, e.g. COM5 or /dev/ttyUSB0")
     src.add_argument("--file", help="replay a saved capture instead of reading serial")
-    ap.add_argument("--baud", type=int, default=921600, help="default: 921600")
+    ap.add_argument(
+        "--baud", type=int, default=460800,
+        help="default: 460800, matching esp32/rx/main/config.h's UART_BAUD. "
+             "That default was 921600 until real-hardware testing on a "
+             "Raspberry Pi 2 found it unreliable there (fine from a PC "
+             "directly) - see docs/ESP32_V1.md's failure modes.",
+    )
     ap.add_argument("--node-id", default="RX1", help="reject lines from other boards")
     ap.add_argument("--save", help="write every accepted line to this file")
     ap.add_argument("--rescale", action="store_true", help="apply the RSSI-based AGC rescale")

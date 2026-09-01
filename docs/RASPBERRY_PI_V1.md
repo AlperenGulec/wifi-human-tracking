@@ -39,14 +39,18 @@ Port setup:
 
 - `cfmakeraw()` - raw, non-canonical. Canonical mode buffers inside the tty layer.
 - `VMIN = 1`, `VTIME = 0` - `read()` returns as soon as a byte is available.
-- 921600 baud.
+- **460800 baud, not 921600.** Confirmed on real hardware: 921600 works cleanly
+  from a PC, but the Pi 2's Linux `ch341` driver drops bytes at that rate -
+  dropping to 460800 (plus `LLTF_ONLY` in the RX firmware) cut it from a
+  ~41-60% corrupted-line rate down to ~10%. See `csi-logger`'s `-b` flag and
+  `docs/ESP32_V1.md`'s failure modes table.
 - Take **one timestamp per `read()` burst** and apply it to every complete line in
   that burst. Do not call `clock_gettime()` per byte.
 - Keep a **partial-line carry buffer**. USB delivers arbitrary chunk boundaries, so a
   read can end mid-line.
 
-Writing to disk: normal `FILE*`, `fflush()` on a ~1 s timer, not per line. At ~44 KB/s
-a crash costs at most ~44 KB. A separate writer thread is over-engineering at this rate.
+Writing to disk: normal `FILE*`, `fflush()` on a ~1 s timer, not per line. At ~22.5 KB/s
+a crash costs at most ~22.5 KB. A separate writer thread is over-engineering at this rate.
 
 Reconnection: if `read()` returns 0 or `EIO`/`ENXIO` (the ESP32 reset and the USB
 device re-enumerated), close, drop the partial buffer, and reopen in a retry loop.
@@ -160,13 +164,17 @@ Stop script:
 2. Convert `frames_raw.txt` to `frames.csv`.
 3. Run verification.
 
-Verification:
+Verification (`session_verify.sh`, on the Pi):
 
 - CSI line count / duration should be ~50 pps
 - count gaps in `seq` to estimate dropped CSI packets
 - `frames.csv` line count should be ~ duration x 10
-- `ffprobe video.h264` returns a valid stream
 - all four files exist and are non-empty
+
+`ffprobe video.h264` returning a valid stream is a useful check too, but
+`ffprobe` is not in the Pi image (and shouldn't be, for a logger-only device) -
+that check happens on the PC after copying the session over, not in
+`session_verify.sh`.
 
 ## Storage
 
@@ -175,9 +183,9 @@ to a component whose only job is reliable local capture.
 
 | Stream | Rate | Per hour |
 |---|---|---|
-| csi.csv (~870 B/line at 50 pps) | ~44 KB/s | ~157 MB |
+| csi.csv (~450 B/line at 50 pps, `LLTF_ONLY`) | ~22.5 KB/s | ~81 MB |
 | video.h264 (4 Mbit/s cap) | ~0.5 MB/s | ~1.8 GB |
-| **Combined** | **~0.54 MB/s** | **~2 GB** |
+| **Combined** | **~0.52 MB/s** | **~1.9 GB** |
 
 A class A1 card sustains at least 10 MB/s sequential write, so there is roughly 20x
 headroom. Both files are append-only streams, which is the SD card's best case.
@@ -201,8 +209,12 @@ This section covers the high-level configuration needed. Key settings:
 ## Bring-up checklist
 
 1. Image boots. Plug in the ESP32 RX. `dmesg` shows cp210x or ch341, and
-   `/dev/esp32-rx` resolves.
-2. `cat /dev/esp32-rx` shows CSI CSV lines. Confirms baud and wiring.
+   `/dev/esp32-rx` resolves. Also check `dmesg` for `Undervoltage detected` -
+   if present, the power supply is inadequate even before the ESP32 is
+   attached; fix that first (see failure modes).
+2. `stty -F /dev/esp32-rx 460800 raw -echo; cat /dev/esp32-rx` shows CSI CSV
+   lines. Confirms baud and wiring. **460800, not 921600** — see "Serial
+   logger" for why the Pi specifically needs the lower rate.
 3. Run `csi-logger`. `pi_timestamp_ms` increases monotonically at ~50 lines/s.
 4. `rpicam-hello --list-cameras` finds the imx219.
 5. Record 10 s. Copy `video.h264` to the PC and play it with **ffmpeg or mpv, not
@@ -217,8 +229,10 @@ This section covers the high-level configuration needed. Key settings:
 | Symptom | Cause | Fix |
 |---|---|---|
 | No `/dev/esp32-rx` | driver not loaded, or udev VID/PID wrong | check dmesg, check the rule |
-| Garbage bytes | wrong baud | 921600 both ends |
+| Garbage bytes | wrong baud | 460800 both ends (not 921600 — see "Serial logger") |
 | Dropped CSI lines | read loop blocked by per-line flush | flush on a timer instead |
+| ~10-60% of lines corrupted (two records merged, one missing `\n`), even in a raw `stty`+`head` capture with `csi-logger` out of the picture entirely | Pi 2's Linux `ch341` driver drops bytes at 921600 baud. Confirmed not caused by our code, not fixed by removing other USB traffic (Ethernet, which shares the Pi 2's internal USB hub, made no difference), not fixed by data volume alone (halving the line size at 921600 made it worse) | 460800 baud + `LLTF_ONLY` cuts it to ~10%, which `pc/csi/parse.py` already rejects cleanly as malformed. Accepted as a residual for V1 rather than chased further. |
+| `Undervoltage detected` in `dmesg` | Power supply/cable inadequate for the Pi 2 plus whatever's on its USB ports (the ESP32 board draws current too) | Official-spec 5V/2.5A supply, short thick-gauge cable. If it still trips with the ESP32 attached, power it from a separately-powered USB hub instead of the Pi's own port. |
 | "No cameras available" | overlay missing, legacy stack enabled | fix config.txt, reseat ribbon |
 | Video unplayable | killed hard, or player issue | use SIGINT, `--inline`, play with ffmpeg |
 | CSI and frames misaligned | mixed clocks | both must be CLOCK_MONOTONIC; check µs to ms |

@@ -12,6 +12,13 @@
  * Why C and not Python: keeps python3 + pyserial off the image, and gives a
  * predictable clock_gettime() immediately after read() returns.
  *
+ * -b sets the baud rate and must match esp32/rx/main/config.h's UART_BAUD.
+ * Default is 460800, not 921600: real-hardware testing found this Pi 2's
+ * Linux ch341 driver drops bytes at 921600 (confirmed via a raw stty+head
+ * capture bypassing this file entirely - not this code's bug, and not fixed
+ * by removing other USB traffic or by data volume alone). 921600 remains
+ * fine from a PC directly. See docs/RASPBERRY_PI_V1.md's failure modes.
+ *
  * See docs/RASPBERRY_PI_V1.md, "Serial logger".
  */
 
@@ -104,7 +111,26 @@ static void line_asm_feed(line_asm_t *a, const char *data, size_t n,
 /* Serial port                                                         */
 /* ------------------------------------------------------------------ */
 
-static int serial_open(const char *path)
+/* -b accepts a plain integer baud (e.g. 460800), not a B-constant - this maps
+ * the standard rates we might actually use to their termios constants. Add
+ * more here if a future rate is needed; there is no arithmetic mapping on
+ * Linux, the B* values are opaque enum-like constants. */
+static int baud_to_speed(long baud, speed_t *out)
+{
+    switch (baud) {
+    case 9600:   *out = B9600;   return 0;
+    case 19200:  *out = B19200;  return 0;
+    case 38400:  *out = B38400;  return 0;
+    case 57600:  *out = B57600;  return 0;
+    case 115200: *out = B115200; return 0;
+    case 230400: *out = B230400; return 0;
+    case 460800: *out = B460800; return 0;
+    case 921600: *out = B921600; return 0;
+    default:     return -1;
+    }
+}
+
+static int serial_open(const char *path, speed_t speed)
 {
     int fd = open(path, O_RDONLY | O_NOCTTY);
     if (fd < 0) {
@@ -120,8 +146,8 @@ static int serial_open(const char *path)
     /* Raw, non-canonical. Canonical mode buffers inside the tty layer, which
      * would destroy the arrival timestamp we are trying to take. */
     cfmakeraw(&tio);
-    cfsetispeed(&tio, B921600);
-    cfsetospeed(&tio, B921600);
+    cfsetispeed(&tio, speed);
+    cfsetospeed(&tio, speed);
 
     tio.c_cflag |= (CLOCAL | CREAD);
     tio.c_cflag &= ~CRTSCTS;
@@ -175,7 +201,9 @@ static void usage(const char *argv0)
             "usage: %s -p <port> -o <out.csv> [-n <node_id>]\n"
             "  -p  serial device      (default /dev/esp32-rx)\n"
             "  -o  output csv         (default csi.csv)\n"
-            "  -n  node id to keep    (default RX1)\n",
+            "  -n  node id to keep    (default RX1)\n"
+            "  -b  baud rate          (default 460800; must match the RX firmware's\n"
+            "                          UART_BAUD in esp32/rx/main/config.h)\n",
             argv0);
 }
 
@@ -184,13 +212,20 @@ int main(int argc, char **argv)
     const char *port = "/dev/esp32-rx";
     const char *out = "csi.csv";
     const char *node_id = "RX1";
+    speed_t speed = B460800;   /* matches esp32/rx/main/config.h's UART_BAUD */
 
     int opt;
-    while ((opt = getopt(argc, argv, "p:o:n:h")) != -1) {
+    while ((opt = getopt(argc, argv, "p:o:n:b:h")) != -1) {
         switch (opt) {
         case 'p': port = optarg; break;
         case 'o': out = optarg; break;
         case 'n': node_id = optarg; break;
+        case 'b':
+            if (baud_to_speed(atol(optarg), &speed) != 0) {
+                fprintf(stderr, "csi-logger: unsupported baud %s\n", optarg);
+                return 2;
+            }
+            break;
         default:  usage(argv[0]); return opt == 'h' ? 0 : 2;
         }
     }
@@ -222,7 +257,7 @@ int main(int argc, char **argv)
 
     while (running) {
         if (fd < 0) {
-            fd = serial_open(port);
+            fd = serial_open(port, speed);
             if (fd < 0) {
                 if (!running) break;
                 usleep(REOPEN_DELAY_US);
@@ -255,8 +290,9 @@ int main(int argc, char **argv)
             continue;
         }
 
-        /* Flush on a timer, not per line. At ~44 KB/s a crash costs <= ~44 KB,
-         * and per-line flushing would stall the read loop. */
+        /* Flush on a timer, not per line. At ~22.5 KB/s (LLTF_ONLY default) a
+         * crash costs <= ~22.5 KB, and per-line flushing would stall the read
+         * loop. */
         if (t_ms - last_flush >= FLUSH_EVERY_MS) {
             fflush(w.fp);
             last_flush = t_ms;

@@ -9,7 +9,7 @@ ESP32 TX (our firmware, STA)
    ▼
 ESP32 RX (our firmware, SoftAP)
    │  CSI callback → ring buffer → main loop → UART
-   │  CSV lines, raw int8 CSI, 921600 baud
+   │  CSV lines, raw int8 CSI, 460800 baud to the Pi (921600 to a PC directly)
    ▼
 Raspberry Pi 2
    │  reads serial, prepends its own timestamp, appends to file
@@ -82,7 +82,9 @@ USB serial from RX to Pi.
 
 - Simple, no extra Wi-Fi traffic competing with the CSI link
 - Gives clean arrival timestamps
-- 50 pps of CSV is ~44 KB/s, about half a 921600 baud link
+- 50 pps of CSV is ~22.5 KB/s (with `LLTF_ONLY`), about half a 460800 baud
+  link — the rate actually used to the Pi. See `docs/ESP32_V1.md#serial-output`
+  for why the Pi uses a lower baud than a PC connection does.
 
 Wi-Fi UDP or MQTT were rejected for V1: they add congestion on the same band we are
 measuring, and the Pi's Ethernet shares bandwidth with USB.

@@ -13,6 +13,7 @@ csi-logger -p /dev/esp32-rx -o csi.csv -n RX1
 | `-p` | `/dev/esp32-rx` | serial device (udev symlink, see `99-esp32.rules`) |
 | `-o` | `csi.csv` | output file, opened in append mode |
 | `-n` | `RX1` | node id; lines not starting `<node_id>,` are dropped |
+| `-b` | `460800` | baud rate; must match `UART_BAUD` in `esp32/rx/main/config.h`. Supports 9600-921600 in the standard steps. 921600 works fine from a PC but is unreliable from this Pi 2's `ch341` driver — see `docs/ESP32_V1.md`'s failure modes. |
 
 Build: `make`. Install: `make install` (or through the Yocto recipe, which is
 how it gets onto the image — `core-image-minimal` ships no toolchain, so this
@@ -44,8 +45,9 @@ Details and reasoning: `docs/RASPBERRY_PI_V1.md`, "Serial logger".
   buffers inside the tty layer, which would destroy the arrival timestamp.
 - **Partial-line carry buffer.** USB delivers arbitrary chunk boundaries, so a
   read can end mid-line, mid-number, or exactly on the `\n`.
-- **Flush on a ~1 s timer**, never per line. At ~44 KB/s a crash costs at most
-  ~44 KB, and per-line flushing would stall the read loop.
+- **Flush on a ~1 s timer**, never per line. At ~22.5 KB/s (`LLTF_ONLY`
+  default) a crash costs at most ~22.5 KB, and per-line flushing would stall
+  the read loop.
 - **Reconnect loop.** If the ESP32 resets, the USB device re-enumerates and
   `read()` returns 0 or `EIO`/`ENXIO`. The logger closes, **drops the partial
   buffer**, and reopens.
@@ -58,6 +60,7 @@ Details and reasoning: `docs/RASPBERRY_PI_V1.md`, "Serial logger".
   that merged line. Losing one line per reset is cheaper than trying to
   resynchronise mid-line.
 - **A line longer than 8 KB is dropped** and the logger resynchronises at the
-  next newline. A real line is ~870 B, so this only triggers on a wedged port.
+  next newline. A real line is ~450 B with `LLTF_ONLY` (~870 B if it's ever
+  turned off), so this only triggers on a wedged port.
 - The `node_id` check requires the following character to be a comma, so `RX1`
   does not accidentally match a hypothetical `RX10`.

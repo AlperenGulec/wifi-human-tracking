@@ -24,6 +24,7 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
+#include "esp_timer.h"
 #include "esp_wifi.h"
 #include "nvs_flash.h"
 
@@ -34,16 +35,33 @@ static const char *TAG = NODE_ID;
 #define GOT_IP_BIT BIT0
 static EventGroupHandle_t s_events;
 
+/* Reconnect pacing. esp_wifi_connect() is a one-shot attempt, not a paced
+ * retry loop - calling it immediately and repeatedly on every disconnect
+ * event with no backoff is a known way to get an ESP32 stuck in an unreliable
+ * reconnect state (sometimes it recovers, sometimes it needs a full power
+ * cycle - exactly the symptom seen after RX resets on the Pi). A one-shot
+ * esp_timer gives the AP time to actually come back up before we try again,
+ * without blocking the event handler itself (which runs on the system event
+ * task and must return quickly). */
+#define RECONNECT_DELAY_US (500 * 1000)
+static esp_timer_handle_t s_reconnect_timer;
+
+static void reconnect_timer_cb(void *arg)
+{
+    (void)arg;
+    esp_wifi_connect();
+}
+
 static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
-        /* The RX may not be powered yet, or may have been reset. Retry forever.
-         * No delay here: this runs on the system event task and must not block.
-         * The scan inside esp_wifi_connect() paces the retries on its own. */
+        /* The RX may not be powered yet, or may have been reset. Retry forever,
+         * but not immediately - see s_reconnect_timer above for why. */
         xEventGroupClearBits(s_events, GOT_IP_BIT);
-        esp_wifi_connect();
+        esp_timer_stop(s_reconnect_timer);   /* ok if not currently running */
+        esp_timer_start_once(s_reconnect_timer, RECONNECT_DELAY_US);
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         xEventGroupSetBits(s_events, GOT_IP_BIT);
     }
@@ -103,6 +121,13 @@ void app_main(void)
     ESP_ERROR_CHECK(err);
 
     s_events = xEventGroupCreate();
+
+    const esp_timer_create_args_t timer_args = {
+        .callback = reconnect_timer_cb,
+        .name = "reconnect",
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&timer_args, &s_reconnect_timer));
+
     wifi_start_sta();
 
     ESP_LOGI(TAG, "waiting to associate with \"%s\" on channel %d", WIFI_SSID, WIFI_CHANNEL);

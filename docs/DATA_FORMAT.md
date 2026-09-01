@@ -43,7 +43,7 @@ subcarrier. Amplitude is **not** computed here.
 | `pi_timestamp_ms` | `CLOCK_MONOTONIC`, stamped by the Pi on arrival. **The only column used for alignment.** |
 | `t_us` | The ESP32's own microsecond clock. Diagnosing gaps and jitter only — never alignment. |
 | `sig_mode` | 1 = HT (11n), what we want. 0 means the rate fell back to 1 Mbps. |
-| `len` | Number of int8 values in `csi_raw`. 256 = HT20. |
+| `len` | Number of int8 values in `csi_raw`. **128 on every line** with `LLTF_ONLY` (the default — see `docs/ESP32_V1.md#serial-output`); no longer a rate-fallback signal on its own, check `sig_mode` for that. |
 | `first_word_invalid` | 1 when the first 4 bytes are hardware-invalid. Handled on the PC. |
 | `dropped` | Running count of RX ring-buffer overflows. Should stay at 0. |
 
