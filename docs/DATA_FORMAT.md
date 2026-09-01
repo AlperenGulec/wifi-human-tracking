@@ -32,17 +32,30 @@ data/processed/dataset.parquet   windowed features + labels + session_id
 Written by the Pi. The Pi prepends `pi_timestamp_ms`, the rest comes from the ESP32.
 
 ```
-pi_timestamp_ms,node_id,seq,rssi,noise_floor,sig_mode,len,csi_raw
+pi_timestamp_ms,node_id,seq,t_us,rssi,noise_floor,sig_mode,len,first_word_invalid,dropped,csi_raw
 ```
 
 `csi_raw` is a space-separated list of signed int8 values, imaginary then real per
 subcarrier. Amplitude is **not** computed here.
 
+| Column | Meaning |
+|---|---|
+| `pi_timestamp_ms` | `CLOCK_MONOTONIC`, stamped by the Pi on arrival. **The only column used for alignment.** |
+| `t_us` | The ESP32's own microsecond clock. Diagnosing gaps and jitter only — never alignment. |
+| `sig_mode` | 1 = HT (11n), what we want. 0 means the rate fell back to 1 Mbps. |
+| `len` | Number of int8 values in `csi_raw`. 256 = HT20. |
+| `first_word_invalid` | 1 when the first 4 bytes are hardware-invalid. Handled on the PC. |
+| `dropped` | Running count of RX ring-buffer overflows. Should stay at 0. |
+
 Example:
 
 ```
-1734203994512,RX1,10482,-52,-94,1,256,12 -7 9 -3 14 -2 ...
+1734203994512,RX1,10482,44351200,-52,-94,1,256,0,0,12 -7 9 -3 14 -2 ...
 ```
+
+`dropped` is a column rather than a periodic status line on purpose: a status
+line would also start with `node_id`, so the Pi's prefix filter would pass it
+into `csi.csv` and break the parser.
 
 Full parsing rules (subcarrier selection, `first_word_invalid` handling,
 reordering) are in [CSI_PROCESSING_V1.md](CSI_PROCESSING_V1.md).

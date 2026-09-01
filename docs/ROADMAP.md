@@ -18,14 +18,18 @@ Write TX and RX firmware ourselves, flash both, get CSI onto the serial port.
 
 ### Firmware
 
-- [ ] TX written: STA mode, connects to RX SoftAP, `WIFI_PS_NONE`, UDP send loop
+- [x] TX written: STA mode, connects to RX SoftAP, `WIFI_PS_NONE`, UDP send loop
       driven by `vTaskDelayUntil` at 20 ms
-- [ ] RX written: SoftAP, CSI config set, callback does memcpy + barrier + index bump
+- [x] RX written: SoftAP, CSI config set, callback does memcpy + barrier + index bump
       into the ring buffer only
-- [ ] RX consumer loop in `app_main`, pinned to core 1, `uart_write_bytes` with a
+- [x] RX consumer loop in `app_main`, pinned to core 1, `uart_write_bytes` with a
       TX ring buffer, hand-rolled int8-to-ASCII
-- [ ] IDF logging silenced on the RX so it cannot corrupt the CSV stream
-- [ ] `dropped` counter emitted so ring overflow is visible, not silent
+- [x] IDF logging silenced on the RX so it cannot corrupt the CSV stream
+- [x] `dropped` counter emitted so ring overflow is visible, not silent
+
+Written, not yet compiled with ESP-IDF or run on hardware. The CSV formatter has
+been exercised on a host build against `pc/csi`, so the two ends are known to
+agree on the line format.
 
 ### Bring-up
 
@@ -35,6 +39,7 @@ Write TX and RX firmware ourselves, flash both, get CSI onto the serial port.
 - [ ] `sig_mode == 1`, `len == 256`
 - [ ] ~50 lines/s, no sequence gaps, `dropped` stays at 0
 - [ ] Amplitude curve deforms when you walk between the boards
+      (`python scripts/csi_monitor.py --port COM5 --save walk.csv`)
 
 **Gate:** the walk test produces a clear, repeatable change. If the signal looks like
 noise after fixing distance, channel, and rate, stop here and fix it. Nothing later

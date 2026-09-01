@@ -82,7 +82,7 @@ USB serial from RX to Pi.
 
 - Simple, no extra Wi-Fi traffic competing with the CSI link
 - Gives clean arrival timestamps
-- 50 pps of CSV is ~30 KB/s, comfortably inside a 921600 baud link
+- 50 pps of CSV is ~44 KB/s, about half a 921600 baud link
 
 Wi-Fi UDP or MQTT were rejected for V1: they add congestion on the same band we are
 measuring, and the Pi's Ethernet shares bandwidth with USB.

@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "PC-side pipeline for Wi-Fi CSI indoor human tracking"
 requires-python = ">=3.10"
 dependencies = [
-    # add as needed: numpy, pandas, opencv-python, scikit-learn, pyyaml
+    "numpy>=1.24",
+    "matplotlib>=3.7",   # bring-up plots and QC overlays
+    "pyserial>=3.5",     # scripts/csi_monitor.py reads the RX board directly
+    # add as needed: pandas, opencv-python, scikit-learn, pyyaml
 ]
 
 [tool.setuptools.packages.find]

@@ -90,6 +90,12 @@ In every new shell:
 . ~/esp/esp-idf/export.sh
 ```
 
+On Windows the same install is driven from PowerShell — clone to a drive with
+5-8 GB free, run `install.ps1 esp32`, and use `. $HOME\esp\esp-idf\export.ps1`
+(or the "ESP-IDF PowerShell" start-menu shortcut) in place of `export.sh`.
+Everything below is identical apart from the port name (`COM5`, not
+`/dev/ttyUSB0`).
+
 Build and flash:
 
 ```bash
@@ -203,8 +209,10 @@ Runs inside the Wi-Fi task, so it must stay cheap. Copy and leave.
 
 typedef struct {
     uint32_t seq;
+    uint32_t dropped;
     int64_t  t_us;
     int8_t   rssi;
+    int8_t   noise_floor;
     uint8_t  sig_mode;
     uint8_t  first_word_invalid;
     uint16_t len;
@@ -221,18 +229,30 @@ static void csi_rx_cb(void *ctx, wifi_csi_info_t *info)
     uint32_t next = (head + 1) & (RING_SZ - 1);
     if (next == tail) { dropped++; return; }      /* full: drop, count it */
 
+    uint16_t len = info->len;
+    if (len > CSI_BUF_MAX) len = CSI_BUF_MAX;     /* clamp before copying */
+
     csi_record_t *r = &ring[head];
     r->seq   = ++seq;
+    r->dropped = dropped;
     r->t_us  = esp_timer_get_time();
     r->rssi  = info->rx_ctrl.rssi;
-    r->len   = info->len;
+    r->noise_floor = info->rx_ctrl.noise_floor;
+    r->sig_mode = info->rx_ctrl.sig_mode;
+    r->len   = len;
     r->first_word_invalid = info->first_word_invalid;
-    memcpy(r->buf, info->buf, info->len);
+    memcpy(r->buf, info->buf, len);
 
     __sync_synchronize();     /* publish the data BEFORE the index */
     head = next;
 }
 ```
+
+**Clamp `info->len` before the `memcpy`.** `CSI_BUF_MAX` is 384, not 256, and an
+HT40 or STBC frame can report more than that. Copying an unclamped length into a
+fixed buffer is an overflow, so an unexpected length must truncate instead. The
+`len` field then always equals the number of values on the line, which is what
+the PC parser checks against.
 
 **The memory barrier is not optional.** The producer is on core 0 and the
 consumer on core 1. Without it, the compiler or the store buffer can make the new
@@ -330,8 +350,11 @@ Selection happens on the PC, so it can be retuned without reflashing.
 
 - **Baud: 921600.** Reliable on both CP2102 and CH340 bridges. Higher rates
   (1.5M, 2M) work on good hardware but are flaky.
-- **CSV, not binary.** At 50 pps we use ~30 KB/s of a ~92 KB/s link, so we are
-  far from saturation and CSV is debuggable. Switch to binary only past ~100 pps.
+- **CSV, not binary.** A 256-value line runs ~870 B, so 50 pps is ~44 KB/s of a
+  ~92 KB/s link — roughly half, with enough headroom that CSV stays worth its
+  debuggability. Switch to binary only past ~100 pps. If the link does get
+  tight, set `LLTF_ONLY` in `config.h` first: it halves the line and V1 uses
+  nothing but LLTF on the PC anyway.
 - Include a **sequence counter** and the **local microsecond timestamp** in every
   record, even though the Pi timestamps on arrival. Gaps in the sequence tell us
   where packets are being lost.
@@ -339,11 +362,17 @@ Selection happens on the PC, so it can be retuned without reflashing.
 Line emitted by the ESP32 (the Pi prepends its own timestamp):
 
 ```
-node_id,seq,rssi,noise_floor,sig_mode,len,<raw int8 values...>
+node_id,seq,t_us,rssi,noise_floor,sig_mode,len,first_word_invalid,dropped,<raw int8 values...>
 ```
 
-Print `dropped` in the same line or as a periodic status line, so ring overflow is
-visible instead of silent.
+`len` is the number of int8 values in the last field, so a truncated or spliced
+line is caught by counting.
+
+**`dropped` is a column, not a separate status line.** A status line would start
+with `node_id` too, so the Pi's prefix filter would let it through into
+`csi.csv` and break the parser. One line shape, one parser.
+
+`first_word_invalid` is forwarded here and handled on the PC, not on the ESP32.
 
 ## Configurable parameters
 

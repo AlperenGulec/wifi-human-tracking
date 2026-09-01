@@ -45,8 +45,8 @@ Port setup:
 - Keep a **partial-line carry buffer**. USB delivers arbitrary chunk boundaries, so a
   read can end mid-line.
 
-Writing to disk: normal `FILE*`, `fflush()` on a ~1 s timer, not per line. At ~30 KB/s
-a crash costs at most ~30 KB. A separate writer thread is over-engineering at this rate.
+Writing to disk: normal `FILE*`, `fflush()` on a ~1 s timer, not per line. At ~44 KB/s
+a crash costs at most ~44 KB. A separate writer thread is over-engineering at this rate.
 
 Reconnection: if `read()` returns 0 or `EIO`/`ENXIO` (the ESP32 reset and the USB
 device re-enumerated), close, drop the partial buffer, and reopen in a retry loop.
@@ -145,9 +145,9 @@ to a component whose only job is reliable local capture.
 
 | Stream | Rate | Per hour |
 |---|---|---|
-| csi.csv (~600 B/line at 50 pps) | ~30 KB/s | ~110 MB |
+| csi.csv (~870 B/line at 50 pps) | ~44 KB/s | ~157 MB |
 | video.h264 (4 Mbit/s cap) | ~0.5 MB/s | ~1.8 GB |
-| **Combined** | **~0.53 MB/s** | **~2 GB** |
+| **Combined** | **~0.54 MB/s** | **~2 GB** |
 
 A class A1 card sustains at least 10 MB/s sequential write, so there is roughly 20x
 headroom. Both files are append-only streams, which is the SD card's best case.
