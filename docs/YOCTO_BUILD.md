@@ -155,7 +155,7 @@ rpicam-hello --list-cameras
 # expect: 0 : imx219 [3280x2464] (...)
 
 rpicam-vid -t 5000 --width 1280 --height 720 --framerate 10 \
-  --codec h264 --save-pts frames.csv -o test.h264
+  --codec h264 --save-pts frames_raw.txt -o test.h264
 
 ls -l /dev/video11        # hardware H.264 encoder (bcm2835-codec)
 top -d1                   # rpicam-vid should stay well under one core
@@ -165,6 +165,13 @@ lsmod | grep -E 'imx219|bcm2835'
 Play back `test.h264` on the PC (`ffmpeg -i test.h264` or `mpv`), not with VLC.
 
 High CPU means it fell back to software encode — check `/dev/video11` exists and `CONFIG_VIDEO_BCM2835_CODEC` is enabled.
+
+`frames_raw.txt` is `--save-pts`'s raw output — mkvmerge timecode v2, relative
+milliseconds, not yet the `frames.csv` the rest of the pipeline expects. See
+[RASPBERRY_PI_V1.md](RASPBERRY_PI_V1.md#frame-timestamps) and
+`raspberry-pi/camera/pts_to_frames.sh` for the real conversion, which needs an
+anchor timestamp that only `session_start.sh` captures — this manual test has no
+use for one.
 
 ## 10. Troubleshooting
 

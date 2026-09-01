@@ -8,7 +8,7 @@ Each recording session gets its own folder:
 data/raw/session_YYYYMMDD_HHMM/
 ├── csi.csv          written by the Pi
 ├── video.h264       written by the Pi
-├── frames_raw.txt   raw PTS from rpicam-vid, microseconds (intermediate)
+├── frames_raw.txt   raw PTS from rpicam-vid, mkvmerge timecode v2, relative ms (intermediate)
 ├── frames.csv       frame_id, pi_timestamp_ms
 └── session.json     room, layout, notes, clock mapping, empty-room segments
 ```
@@ -125,6 +125,7 @@ operator-declared empty-room segments.
   "t0_monotonic_ms": 123456,
   "t0_realtime_ms": 1765000000000,
   "monotonic_to_realtime_offset_ms": 1764999876544,
+  "camera_pts_anchor_monotonic_ms": 124890,
 
   "empty_segments_ms": [
     [123456, 243456]
@@ -136,6 +137,14 @@ operator-declared empty-room segments.
 `frames.csv` are monotonic, not wall clock, because the Pi 2 has no RTC. Without
 this offset the absolute time of a session cannot be recovered afterwards.
 See [RASPBERRY_PI_V1.md](RASPBERRY_PI_V1.md) for why.
+
+**`camera_pts_anchor_monotonic_ms`** is separate from `t0_monotonic_ms`.
+`t0_monotonic_ms` is when the session itself started; `camera_pts_anchor_monotonic_ms`
+is `CLOCK_MONOTONIC` at the instant `rpicam-vid` produced its first frame (frame 0
+of `frames_raw.txt`), which is normally a little later. `rpicam-vid`'s own PTS
+values are relative to that first frame, not absolute, so this anchor is what
+`pts_to_frames.sh` adds back to make `frames.csv` timestamps comparable to
+`csi.csv` timestamps. See [RASPBERRY_PI_V1.md](RASPBERRY_PI_V1.md#frame-timestamps).
 
 **`empty_segments_ms` is required for the empty class.** The labeling
 pipeline only ever assigns `zone_id = "empty"` inside these operator-declared

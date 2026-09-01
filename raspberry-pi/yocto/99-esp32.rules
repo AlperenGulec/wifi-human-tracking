@@ -1,0 +1,9 @@
+# Stable /dev/esp32-rx regardless of USB enumeration order, and surviving the
+# ESP32 re-enumerating after a reset. See docs/RASPBERRY_PI_V1.md.
+#
+# CP2102 (Silicon Labs) and CH340 (WCH) both appear in the wild. The user's own
+# boards are CH340 - confirmed on Windows during ESP32 bring-up (VID_1A86,
+# PID_7523, "USB-SERIAL CH340"). Both rules are kept since either bridge chip
+# might show up on a different board.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", SYMLINK+="esp32-rx"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="esp32-rx"

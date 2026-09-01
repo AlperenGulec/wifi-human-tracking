@@ -69,7 +69,9 @@ survives the ESP32 re-enumerating after a reset.
 
 ## Camera
 
-**Modern stack: libcamera + rpicam-apps.** The legacy MMAL / `raspivid` / `start_x=1`
+**Modern stack: libcamera + libcamera-apps** (the Yocto package name; the
+binaries it ships are `rpicam-vid`, `rpicam-hello`, etc. — see
+`docs/YOCTO_BUILD.md`). The legacy MMAL / `raspivid` / `start_x=1`
 path is deprecated by Raspberry Pi and is a dead end for a new build.
 
 Hardware H.264 works on the Pi 2. The BCM2836 keeps the BCM2835's VideoCore IV
@@ -95,19 +97,47 @@ they are unnecessary, and raising `gpu_mem` is actively harmful.
 
 ## Frame timestamps
 
-`--save-pts` writes one timestamp per frame in **microseconds**, on the monotonic
-clock. So:
+**Corrected from an earlier draft of this document, which claimed `--save-pts`
+writes absolute monotonic microseconds. It does not. Verified against a real
+capture from the user's Pi.**
+
+`--save-pts` writes **mkvmerge timecode format v2**: a literal
+`# timecode format v2` header line, then one value per line in **milliseconds
+with 3 decimals**, measured **relative to frame 0** (the first line is always
+`0.000`). It is not absolute, and it is not microseconds.
 
 ```
-pi_timestamp_ms = round(pts_us / 1000)
+# timecode format v2
+0.000
+100.001
+200.000
+300.002
+...
 ```
 
-No start-offset guessing. Do not use the "wall clock at start plus PTS offset" trick -
-libcamera can take seconds to produce its first frame, which puts that error straight
-into the alignment.
+Because it is relative, an absolute anchor is still needed to put frame
+timestamps on the same `CLOCK_MONOTONIC` axis as `csi.csv`. The start script
+records `CLOCK_MONOTONIC` at the moment the **first** line past the header
+appears in `frames_raw.txt` (polled, not the process-launch time), and stores it
+in `session.json` as `camera_pts_anchor_monotonic_ms`. Frame timestamps are then:
+
+```
+pi_timestamp_ms(frame_i) = camera_pts_anchor_monotonic_ms + round(relative_ms(frame_i))
+```
+
+Using the *process launch* time instead was rejected for exactly the reason the
+old text of this section warned about: libcamera can take seconds to produce its
+first frame, and that whole delay would land in the alignment. Polling for the
+first real line removes the startup delay from the anchor; what is left is
+whatever latency exists between `rpicam-vid` writing that line and our poll loop
+observing it. That residual has not been measured on real hardware yet. If it
+turns out `rpicam-vid` buffers `frames_raw.txt` internally rather than flushing
+early, the poll will not see anything until the file closes and
+`session_start.sh` falls back to launch-time with a printed warning — see
+`raspberry-pi/session/session_start.sh`.
 
 The stop script converts `frames_raw.txt` into `frames.csv` with a sequential
-`frame_id` starting at 0.
+`frame_id` starting at 0, using `raspberry-pi/camera/pts_to_frames.sh`.
 
 GStreamer probes were rejected: more packages in the image, fiddly timestamp
 behaviour, no benefit over `--save-pts`.

@@ -57,7 +57,7 @@ Pi-side logging and camera recording; PC-side video labeling and ground-truth ge
 - [ ] Logger drops any line not starting with the configured `node_id`
 - [ ] Pi records 1280x720 H.264 video at 10 fps with hardware encoding via rpicam-vid
 - [ ] rpicam-vid `--save-pts` produces microsecond timestamps; converted to `frames.csv` with frame_id
-- [ ] Yocto image built successfully with core-image-minimal + libcamera + rpicam-apps
+- [x] Yocto image built successfully with core-image-minimal + libcamera + libcamera-apps
 - [ ] Session start/stop scripts work: clock set, `session.json` written with monotonic<->realtime offset, both loggers launched
 - [ ] Session verification passes: CSI line rate ~50 pps, frame count ~10 fps, no mid-stream dropout
 
