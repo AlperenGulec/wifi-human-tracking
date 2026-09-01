@@ -14,7 +14,7 @@ LICENSE = "CLOSED"
 #
 #   WIFI_TRACKING_REPO = "/home/you/wifi-human-tracking"
 #
-FILESEXTRAPATHS:prepend := "${WIFI_TRACKING_REPO}/raspberry-pi/logger:${WIFI_TRACKING_REPO}/raspberry-pi/camera:${WIFI_TRACKING_REPO}/raspberry-pi/session:${THISDIR}:"
+FILESEXTRAPATHS:prepend := "${WIFI_TRACKING_REPO}/raspberry-pi/logger:${WIFI_TRACKING_REPO}/raspberry-pi/camera:${WIFI_TRACKING_REPO}/raspberry-pi/session:${WIFI_TRACKING_REPO}/raspberry-pi/yocto:${THISDIR}:"
 
 SRC_URI = " \
     file://csi_logger.c \
