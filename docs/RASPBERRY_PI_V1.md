@@ -132,12 +132,19 @@ pi_timestamp_ms(frame_i) = camera_pts_anchor_monotonic_ms + round(relative_ms(fr
 Using the *process launch* time instead was rejected for exactly the reason the
 old text of this section warned about: libcamera can take seconds to produce its
 first frame, and that whole delay would land in the alignment. Polling for the
-first real line removes the startup delay from the anchor; what is left is
-whatever latency exists between `rpicam-vid` writing that line and our poll loop
-observing it. That residual has not been measured on real hardware yet. If it
-turns out `rpicam-vid` buffers `frames_raw.txt` internally rather than flushing
-early, the poll will not see anything until the file closes and
-`session_start.sh` falls back to launch-time with a printed warning — see
+first real line removes the startup delay from the anchor.
+
+**Confirmed on real hardware: `rpicam-vid` writes `frames_raw.txt` incrementally**,
+not buffered until the process exits — caught mid-recording on the Pi with over
+1200 lines already present and the file still visibly growing. So the polling
+approach is sound. The poll window is **20s, not an original 5s** — a real test
+on this Pi 2 showed libcamera's own startup (camera manager init, sensor mode
+negotiation, all visible in its log output) taking longer than 5s on this CPU,
+starving the poll before frame 0 ever arrived and forcing the launch-time
+fallback every time. 20s comfortably covers that; a genuine camera failure (no
+camera, wrong overlay) still falls back within a bounded time rather than
+hanging. If the poll still times out even at 20s, `session_start.sh` falls back
+to launch-time with a printed warning — see
 `raspberry-pi/session/session_start.sh`.
 
 The stop script converts `frames_raw.txt` into `frames.csv` with a sequential

@@ -50,11 +50,19 @@ camera_pid=$!
 # comparable to csi.csv timestamps. Polling for the real first line (not using
 # launch time) removes libcamera's startup delay from the error budget - what
 # remains is whatever latency exists between rpicam-vid writing that line and
-# this loop observing it, which has not been measured on real hardware.
+# this loop observing it.
+#
+# Confirmed on real hardware: frames_raw.txt IS written incrementally (not
+# buffered until the process exits), so polling for it works. The window is
+# 20s, not the original 5s - a Pi 2 test showed libcamera's own startup
+# (camera_manager init, sensor mode negotiation) visibly taking longer than
+# 5s on this CPU, which starved the poll every time before frame 0 ever
+# arrived. 20s covers that comfortably; a real failure (no camera, wrong
+# overlay) still falls back within a bounded time instead of hanging.
 frames_raw="$session_dir/frames_raw.txt"
 camera_anchor_ms=""
 i=0
-while [ "$i" -lt 50 ]; do    # ~5s at 100ms, if fractional sleep works
+while [ "$i" -lt 200 ]; do    # ~20s at 100ms, if fractional sleep works
     if [ -s "$frames_raw" ] && grep -qv '^#' "$frames_raw" 2>/dev/null; then
         camera_anchor_ms=$(monoms)
         break
