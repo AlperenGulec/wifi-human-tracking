@@ -13,3 +13,17 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144
 CONFIG_ESP_CONSOLE_UART_BAUDRATE=921600
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+# --- RF power, and why it is not the default ---
+# See esp32/rx/sdkconfig.defaults for the full diagnosis. Short version: the
+# IDF default of 20 dBm draws a current spike at radio power-up that these
+# boards' regulators cannot hold, causing "E BOD: Brownout detector was
+# triggered" resets right after phy_init - 215 of them in 100 s on this board
+# with one cable. Different USB supplies and cables did not fix it.
+#
+# 10 dBm is the Kconfig minimum, plenty for two boards in one room, and is
+# what docs/HARDWARE.md already asked for ("Do not max it out"). Must be set
+# here rather than via a runtime esp_wifi_set_max_tx_power() call, because the
+# brownout happens inside esp_wifi_start() before any runtime call runs.
+CONFIG_ESP_PHY_MAX_WIFI_TX_POWER=10
+CONFIG_ESP_PHY_REDUCE_TX_POWER=y

@@ -16,3 +16,25 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144
 CONFIG_ESP_CONSOLE_UART_BAUDRATE=460800
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+# --- RF power, and why it is not the default ---
+# The IDF default is 20 dBm, the maximum. On these boards that draws a current
+# spike at radio power-up that the onboard regulator cannot hold: both TX and
+# RX were resetting on "E BOD: Brownout detector was triggered" immediately
+# after phy_init, 26 times in 20 s on RX, so the SoftAP never came up and TX
+# got WIFI_REASON_NO_AP_FOUND (201) forever. Swapping USB supplies and cables
+# did not fix it - the limit is on the board, downstream of USB.
+#
+# 10 dBm is the Kconfig minimum and is far more than enough for two boards in
+# one room. It also matches what docs/HARDWARE.md already asked for ("Do not
+# max it out. Close range can slam the RX AGC") but which the firmware never
+# actually implemented.
+#
+# This has to be the Kconfig value, not a runtime esp_wifi_set_max_tx_power()
+# call: the brownout happens inside esp_wifi_start(), before any runtime call
+# could execute.
+CONFIG_ESP_PHY_MAX_WIFI_TX_POWER=10
+
+# Safety net: if a brownout still happens, drop PHY TX power instead of
+# wedging in a reset loop.
+CONFIG_ESP_PHY_REDUCE_TX_POWER=y

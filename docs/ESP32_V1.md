@@ -105,8 +105,25 @@ idf.py build
 idf.py -p /dev/ttyUSB0 flash monitor    # ctrl-] to quit
 ```
 
-`idf.py fullclean` after changing `sdkconfig.defaults`, otherwise the stale
-`sdkconfig` wins.
+**After changing `sdkconfig.defaults`, delete `sdkconfig` — `idf.py fullclean`
+alone is not enough.**
+
+```bash
+rm sdkconfig && idf.py build
+```
+
+`fullclean` wipes the build directory but leaves `sdkconfig` in place, and
+`sdkconfig.defaults` is only consulted when `sdkconfig` does not exist. So a
+fullclean-and-rebuild silently produces a binary with the *old* settings. This
+was hit for real when adding `CONFIG_ESP_PHY_MAX_WIFI_TX_POWER`: fullclean +
+build reported success, and the generated `sdkconfig` still read `=20`.
+`sdkconfig` is generated and gitignored, so deleting it is safe.
+
+Always confirm the setting actually landed rather than trusting the build:
+
+```bash
+grep CONFIG_ESP_WIFI_CSI_ENABLED sdkconfig
+```
 
 ## Project layout
 
@@ -321,7 +338,7 @@ esp_wifi_set_csi(true);
 | Power save | `esp_wifi_set_ps(WIFI_PS_NONE)` | Mandatory on both boards. Otherwise CSI is intermittent and timestamps lose precision. |
 | Bandwidth | HT20 (`WIFI_BW_HT20`) | Clean 256-byte layout, half the data. Default is HT40, must be set explicitly. |
 | Channel | one fixed quiet channel (1, 6 or 11), not the home network's | Less interference and contention |
-| TX power | default | Do not max it out. Close range can slam the RX AGC. |
+| TX power | **10 dBm**, via `CONFIG_ESP_PHY_MAX_WIFI_TX_POWER=10` | **Not the default.** IDF defaults to 20 dBm (max), whose radio power-up current spike brownout-resets these boards before `phy_init` finishes — see failure modes. 10 dBm is the Kconfig minimum and is ample for one room. Also avoids slamming the RX AGC at close range. |
 
 ## Data format on the wire
 
@@ -435,7 +452,10 @@ visibly changes when you walk.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| No CSI lines at all, everything else fine | `CONFIG_ESP_WIFI_CSI_ENABLED` renamed and silently ignored | check the generated `sdkconfig`, `idf.py fullclean` |
+| No CSI lines at all, everything else fine | `CONFIG_ESP_WIFI_CSI_ENABLED` renamed and silently ignored | check the generated `sdkconfig`; `rm sdkconfig && idf.py build` (fullclean alone will not re-read `sdkconfig.defaults`) |
+| A new `sdkconfig.defaults` setting has no effect, build reports success | `sdkconfig` already existed, so `sdkconfig.defaults` was never consulted | `rm sdkconfig && idf.py build`, then `grep` the generated `sdkconfig` to confirm |
+| `E BOD: Brownout detector was triggered`, repeating right after `phy_init` | Radio power-up current spike at the default 20 dBm TX power exceeds what the board's regulator can hold. Not fixable by changing USB supply or cable - the limit is on the board | `CONFIG_ESP_PHY_MAX_WIFI_TX_POWER=10` and `CONFIG_ESP_PHY_REDUCE_TX_POWER=y` in `sdkconfig.defaults`. Must be Kconfig, not a runtime `esp_wifi_set_max_tx_power()` call - the brownout happens inside `esp_wifi_start()` |
+| TX logs `reason=201` (`NO_AP_FOUND`) with `rssi=-128` forever | The RX SoftAP is not actually broadcasting - often because RX itself is brownout-resetting before it finishes `phy_init` | Scan for the SSID from a phone or PC (`netsh wlan show networks`). If absent, fix RX before looking at TX |
 | `sig_mode == 0` | Rate fell back to 1 Mbps | Confirm the TX is actually associated |
 | All-zero or constant CSI | TX not transmitting, or wrong channel | Check channel match and association |
 | Some lines on the Pi merge two records into one (field count much higher than 11, e.g. 20, 29...) at ~10% rate | Raspberry Pi 2's Linux `ch341` USB-serial driver drops bytes at high baud — confirmed via a raw `stty`+`head` capture bypassing all of this project's code; not fixed by removing other USB traffic or by data volume alone | Already mitigated: 460800 baud (was 921600) + `LLTF_ONLY`. Residual ~10% is cleanly rejected by `pc/csi/parse.py`'s field-count/length check, same as any other malformed packet — not a data-quality problem, just a modest rate loss. From a PC directly (not the Pi), 921600 has never shown this. |

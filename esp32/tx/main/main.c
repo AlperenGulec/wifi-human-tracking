@@ -46,12 +46,20 @@ static EventGroupHandle_t s_events;
 #define RECONNECT_DELAY_US (500 * 1000)
 static esp_timer_handle_t s_reconnect_timer;
 
+static uint32_t s_disconnect_count = 0;
+
 static void reconnect_timer_cb(void *arg)
 {
     (void)arg;
+    ESP_LOGI(TAG, "retrying esp_wifi_connect() (disconnect #%" PRIu32 ")", s_disconnect_count);
     esp_wifi_connect();
 }
 
+/* DIAGNOSTIC: temporary, for chasing intermittent "connection lost, 0 packets"
+ * reports from real sessions. Common reason codes (esp_wifi_types_generic.h):
+ *   2=AUTH_EXPIRE  8=ASSOC_LEAVE  15=4WAY_HANDSHAKE_TIMEOUT
+ *   200=BEACON_TIMEOUT (lost the AP's beacons - RF/interference)
+ *   201=NO_AP_FOUND (AP genuinely not there - RX down, or wrong channel) */
 static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
@@ -59,6 +67,10 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
         /* The RX may not be powered yet, or may have been reset. Retry forever,
          * but not immediately - see s_reconnect_timer above for why. */
+        wifi_event_sta_disconnected_t *evt = (wifi_event_sta_disconnected_t *)data;
+        s_disconnect_count++;
+        ESP_LOGW(TAG, "disconnected #%" PRIu32 ": reason=%d, rssi at disconnect=%d dBm",
+                 s_disconnect_count, evt->reason, evt->rssi);
         xEventGroupClearBits(s_events, GOT_IP_BIT);
         esp_timer_stop(s_reconnect_timer);   /* ok if not currently running */
         esp_timer_start_once(s_reconnect_timer, RECONNECT_DELAY_US);

@@ -26,9 +26,37 @@ done
 shift $((OPTIND - 1))
 data_root="${1:?usage: $0 [-p port] [-r room] [-c channel] <data_root>}"
 
-session_name="session_$(date +%Y%m%d_%H%M)"
+# --- pick a session directory that does not already exist ---
+# The Pi 2 has no RTC, so the wall clock restarts at some arbitrary value on
+# every boot and session names REPEAT across reboots. Combined with csi-logger
+# opening csi.csv in append mode, reusing a directory silently concatenates two
+# unrelated recordings into one file that still looks valid: seq restarts
+# mid-file, the line count exceeds what the logger reported writing, and the
+# gap count explodes. That happened for real (seq 1805 -> 1 at line 938), so
+# never mkdir -p onto an existing session.
+session_base="session_$(date +%Y%m%d_%H%M)"
+session_name="$session_base"
+n=2
+while [ -e "$data_root/$session_name" ]; do
+    echo "session_start: WARNING: $data_root/$session_name already exists" \
+         "(the Pi's clock has no RTC and repeats across reboots) - using a" \
+         "suffix so this recording cannot be appended onto the old one" >&2
+    session_name="${session_base}_$n"
+    n=$((n + 1))
+done
 session_dir="$data_root/$session_name"
-mkdir -p "$session_dir"
+mkdir "$session_dir"
+
+# Warn if the wall clock is obviously unset. This does not affect CSI/frame
+# alignment (that is all CLOCK_MONOTONIC) but it does make session.json's
+# absolute time meaningless and it is what makes names collide above.
+year=$(date +%Y)
+if [ "$year" -lt 2020 ]; then
+    echo "session_start: WARNING: wall clock reads $year - it has not been set." \
+         "session.json's date and t0_realtime_ms will be wrong, and session" \
+         "names will keep colliding. Set it first, e.g.:" \
+         "date -s '2026-09-02 14:30:00'" >&2
+fi
 
 # --- clock mapping: read both clocks together, once, at session start ---
 # monoms reads the exact clock csi-logger stamps every line with.

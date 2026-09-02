@@ -205,6 +205,12 @@ static void uart_start(void)
     ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &cfg));
 }
 
+/* No station join/leave logging here, deliberately. Anything logged after
+ * app_main goes out on the same UART as the CSV stream and corrupts whatever
+ * line is mid-transmission. A diagnostic build with that logging was flashed
+ * once during debugging and did exactly that - it showed up as records merging
+ * with a t_us value landing in the seq column. If you need those events again,
+ * flash such a build for PC-side monitoring only, never for a real capture. */
 static void wifi_start_ap(void)
 {
     ESP_ERROR_CHECK(esp_netif_init());

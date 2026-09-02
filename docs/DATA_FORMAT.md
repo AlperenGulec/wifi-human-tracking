@@ -13,6 +13,17 @@ data/raw/session_YYYYMMDD_HHMM/
 └── session.json     room, layout, notes, clock mapping, empty-room segments
 ```
 
+**Session names can collide, and a colliding name used to corrupt data.** The
+Pi 2 has no RTC, so its wall clock restarts at an arbitrary value on every boot
+and `session_YYYYMMDD_HHMM` repeats. `csi-logger` opens `csi.csv` in append
+mode, so reusing a directory silently concatenated two unrelated recordings
+into one file that still passed verification. `session_start.sh` now refuses to
+reuse a directory and adds a `_2`, `_3`, ... suffix instead.
+
+Sanity check for any session recorded before that fix: **`wc -l csi.csv` must
+match the line count `csi-logger` printed on exit.** If the file has more, it
+contains more than one run — look for `seq` restarting mid-file and discard it.
+
 Processed output:
 
 ```
