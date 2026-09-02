@@ -156,11 +156,12 @@ def main() -> int:
     src.add_argument("--port", help="serial port of the RX board, e.g. COM5 or /dev/ttyUSB0")
     src.add_argument("--file", help="replay a saved capture instead of reading serial")
     ap.add_argument(
-        "--baud", type=int, default=460800,
-        help="default: 460800, matching esp32/rx/main/config.h's UART_BAUD. "
-             "That default was 921600 until real-hardware testing on a "
-             "Raspberry Pi 2 found it unreliable there (fine from a PC "
-             "directly) - see docs/ESP32_V1.md's failure modes.",
+        "--baud", type=int, default=230400,
+        help="default: 230400, matching esp32/rx/main/config.h's UART_BAUD. "
+             "Came down from 921600 -> 460800 -> 230400 as real-hardware "
+             "testing showed the Pi 2's ch341 link losing bytes at the higher "
+             "rates (it is fine from a PC directly) - see docs/ESP32_V1.md's "
+             "failure modes.",
     )
     ap.add_argument("--node-id", default="RX1", help="reject lines from other boards")
     ap.add_argument("--save", help="write every accepted line to this file")

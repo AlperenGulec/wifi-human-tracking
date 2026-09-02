@@ -13,19 +13,28 @@
  * which also throws away boot messages after an ESP32 reset. */
 #define NODE_ID        "RX1"
 
-/* 460800, not 921600. Confirmed on real hardware: 921600 is fine from a PC
- * (Milestone 1 bring-up ran extended captures over CH340 with zero unparsable
- * lines), but on the Raspberry Pi 2's Linux ch341 driver it drops bytes -
- * specifically, sometimes exactly the line-terminating '\n' - at a ~41-60%
- * rate, confirmed via a raw `stty`+`head` capture that bypasses csi-logger.c
- * entirely. Not fixed by removing other USB traffic (Ethernet disconnected:
- * no change) or by halving the line size alone (LLTF_ONLY at 921600 made the
- * loss rate worse, not better). Dropping to 460800 cut it to ~10%. This is a
- * Pi-2-and-CH340-specific finding, not a general "921600 is unreliable" one -
- * see docs/ESP32_V1.md's failure modes table.
+/* 230400. This has come down twice, both times driven by real measurements on
+ * the Pi 2's ch341 USB-serial link (921600 is fine from a PC - Milestone 1 ran
+ * extended CH340 captures with zero unparsable lines - so this is specific to
+ * that bridge on that host):
  *
- * Pi-side must match: csi-logger -b 460800 (the default, as of this change). */
-#define UART_BAUD      460800
+ *   921600 - severe corruption, ~41-60% of lines losing their terminating
+ *            '\n' and merging. Confirmed via a raw `stty`+`head` capture
+ *            bypassing csi-logger.c entirely, so not our code. Unaffected by
+ *            disconnecting Ethernet (not USB contention) and made *worse*, not
+ *            better, by halving the line size with LLTF_ONLY.
+ *   460800 - looked like "~10% malformed" by line count, but measuring the
+ *            payload properly showed EVERY line short: 0 of 1174 carried its
+ *            declared 128 values, each missing 5-19 of them. Unusable. The
+ *            loss was steady rather than bursty, and identical with the camera
+ *            stopped, so it is the bridge not sustaining the baud - not CPU
+ *            contention and not a buffer overflow.
+ *   230400 - current. Requires TX_PERIOD_MS=40 (25 pps) so the byte rate fits:
+ *            ~12.5 KB/s against ~23 KB/s of capacity.
+ *
+ * Pi-side must match: csi-logger -b 230400 (the default, as of this change).
+ * See docs/ESP32_V1.md's failure modes table. */
+#define UART_BAUD      230400
 #define UART_TX_BUF    4096   /* >= 2 KB, so uart_write_bytes does not busy-wait */
 #define UART_RX_BUF    256    /* unused, but the driver requires > 128 */
 

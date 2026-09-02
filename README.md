@@ -47,8 +47,8 @@ The Pi only records and timestamps. All vision and machine learning run on a PC.
 | Stage | State |
 |---|---|
 | Feasibility research | Done |
-| ESP32 firmware bring-up | In progress |
-| Pi logging + camera recording | Designed |
+| ESP32 firmware bring-up | **Done — Stage 1 gate passed** |
+| Pi logging + camera recording | Working end to end |
 | Dataset | Not started |
 | Model | Not started |
 | Real-time tracking | Not started |

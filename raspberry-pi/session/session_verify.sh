@@ -28,8 +28,14 @@ if [ -s "$dir/csi.csv" ]; then
     # compare seq between consecutive WELL-FORMED lines, and ignore jumps too
     # large to be real (the ESP32 sends 50 packets/s; a 10000-packet jump would
     # be 200 s of silence, which the duration check would already have caught).
+    # NF==11 alone is NOT enough: bytes get dropped mid-payload on the
+    # USB-serial link, giving a line with 11 valid fields but fewer values
+    # than `len` claims. pc/csi/parse.py rejects those, so verification must
+    # apply the same test or it reports "well-formed" for data the PC will
+    # throw away. Seen for real: 1174 lines all passing NF==11, every one of
+    # them short (len=128, 109-123 values), 0 usable.
     stats=$(awk -F, -v maxjump=10000 '
-        NF == 11 {
+        NF == 11 && split($11, _v, " ") == $8 + 0 {
             good++
             if (have_prev) {
                 d = $3 - prev - 1

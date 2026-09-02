@@ -10,11 +10,11 @@ Write TX and RX firmware ourselves, flash both, get CSI onto the serial port.
 
 ### Toolchain setup
 
-- [ ] ESP-IDF `release/v5.5` cloned and `install.sh esp32` run
-- [ ] `export.sh` works in a fresh shell; no IDE involved
-- [ ] `sdkconfig.defaults` committed for both projects
-- [ ] Generated `sdkconfig` confirmed to contain `CONFIG_ESP_WIFI_CSI_ENABLED=y`
-- [ ] Exact IDF `git describe` recorded
+- [x] ESP-IDF `release/v5.5` cloned and installed (Windows: `install.ps1 esp32`)
+- [x] `export.ps1` works in a fresh shell; no IDE involved
+- [x] `sdkconfig.defaults` committed for both projects
+- [x] Generated `sdkconfig` confirmed to contain `CONFIG_ESP_WIFI_CSI_ENABLED=y`
+- [x] Exact IDF `git describe` recorded: **v5.5.5-585-gfd0b33dfda0**
 
 ### Firmware
 
@@ -43,11 +43,26 @@ agree on the line format.
 - [x] ~50 lines/s, no sequence gaps, `dropped` stays at 0 (verified from a PC;
       on the Pi, also expect a ~10% cleanly-rejected malformed-line rate — a
       known, accepted residual, see `docs/RASPBERRY_PI_V1.md`'s failure modes)
-- [ ] Amplitude curve deforms when you walk between the boards
-      (`python scripts/csi_monitor.py --port COM5 --save walk.csv`) — the one
-      attempt so far used 50cm spacing and a hand held against the antenna,
-      which is a much harsher near-field test than this gate calls for; not
-      yet run properly with correct placement
+- [x] Amplitude curve deforms when you walk between the boards
+      (`python scripts/csi_monitor.py --port COM5 --save walk.csv`)
+
+**Gate PASSED.** 95 s capture at 1.5 m board spacing, 230400 baud / 25 pps,
+2347/2347 lines parsed cleanly. Using the pipeline's own feature scheme
+(2.0 s windows, 0.5 s stride, per-subcarrier amplitude std):
+
+| | still | walking |
+|---|---|---|
+| mean per-subcarrier std | 1.44 +/- 0.15 | 4.22 +/- 1.33 |
+
+- 99.3% still-vs-walk separability from a **single** feature with a naive
+  threshold (1 of 136 windows misclassified, no false positives)
+- Cohen's d = 2.93 (>2 is near-total separation)
+- 27 distinct excursions over the 53 s walk - repeated passes, not one drift
+
+The amplitude curve is smooth and frequency-selective with a stable shape, and
+shows none of the parsing-bug signatures in CSI_PROCESSING_V1.md (no zigzag, no
+discontinuity at the middle, no DC spike). Presence detection already clears
+PROJECT_OVERVIEW.md's ">85%" minimum before any model is trained.
 
 **Gate:** the walk test produces a clear, repeatable change. If the signal looks like
 noise after fixing distance, channel, and rate, stop here and fix it. Nothing later

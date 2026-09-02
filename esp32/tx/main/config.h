@@ -18,8 +18,19 @@
 #define PAYLOAD_LEN   100
 
 /* --- packet rate --- */
-/* 20 ms -> 50 packets/s. Every packet gives the RX one CSI record. */
-#define TX_PERIOD_MS  20
+/* 40 ms -> 25 packets/s. Every packet gives the RX one CSI record.
+ *
+ * Was 20 ms / 50 pps. Halved because the Pi 2's ch341 USB-serial link cannot
+ * carry the resulting byte rate intact: at 460800 baud every single line
+ * arrived with 5-19 of its 128 values missing (0 of 1174 lines usable), and
+ * the loss was steady rather than bursty, which points at the bridge not
+ * sustaining the baud rather than a buffer overflow. Dropping to 25 pps lets
+ * the link run at 230400 baud, where 25 pps x ~500 B = ~12.5 KB/s against
+ * ~23 KB/s of capacity.
+ *
+ * 25 pps is still ample for the model: a 2.0 s window (docs/CSI_PROCESSING_V1.md)
+ * holds 50 samples, plenty for per-subcarrier mean and std. */
+#define TX_PERIOD_MS  40
 
 /* Identifies this board in the boot log. The TX writes no CSV. */
 #define NODE_ID       "TX1"

@@ -1,5 +1,5 @@
 #!/bin/sh
-# session_start.sh [-p port] [-r room] [-c channel] <data_root>
+# session_start.sh [-p port] [-r room] [-c channel] [-b baud] <data_root>
 #
 # Starts one recording session: creates data_root/session_YYYYMMDD_HHMM/,
 # launches csi-logger and the camera in the background, and writes
@@ -14,17 +14,25 @@ set -eu
 port="/dev/esp32-rx"
 room="office"
 channel="6"
+# Passed to csi-logger explicitly rather than relying on its compiled-in
+# default. The two live in different places (this script is shipped as text,
+# csi-logger's default is baked in at build time) and have already drifted
+# apart once when the firmware's UART_BAUD changed - a mismatch produces a
+# stream of garbage that still looks like "lines", so make it explicit.
+# Must equal UART_BAUD in esp32/rx/main/config.h.
+baud="230400"
 
-while getopts "p:r:c:" opt; do
+while getopts "p:r:c:b:" opt; do
     case "$opt" in
         p) port="$OPTARG" ;;
         r) room="$OPTARG" ;;
         c) channel="$OPTARG" ;;
-        *) echo "usage: $0 [-p port] [-r room] [-c channel] <data_root>" >&2; exit 2 ;;
+        b) baud="$OPTARG" ;;
+        *) echo "usage: $0 [-p port] [-r room] [-c channel] [-b baud] <data_root>" >&2; exit 2 ;;
     esac
 done
 shift $((OPTIND - 1))
-data_root="${1:?usage: $0 [-p port] [-r room] [-c channel] <data_root>}"
+data_root="${1:?usage: $0 [-p port] [-r room] [-c channel] [-b baud] <data_root>}"
 
 # --- pick a session directory that does not already exist ---
 # The Pi 2 has no RTC, so the wall clock restarts at some arbitrary value on
@@ -65,7 +73,7 @@ t0_realtime_ms=$(date +%s%3N)
 offset_ms=$((t0_realtime_ms - t0_monotonic_ms))
 
 # --- start the CSI logger ---
-csi-logger -p "$port" -o "$session_dir/csi.csv" -n RX1 &
+csi-logger -p "$port" -o "$session_dir/csi.csv" -n RX1 -b "$baud" &
 logger_pid=$!
 
 # --- start the camera ---

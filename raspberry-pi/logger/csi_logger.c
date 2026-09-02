@@ -13,11 +13,13 @@
  * predictable clock_gettime() immediately after read() returns.
  *
  * -b sets the baud rate and must match esp32/rx/main/config.h's UART_BAUD.
- * Default is 460800, not 921600: real-hardware testing found this Pi 2's
- * Linux ch341 driver drops bytes at 921600 (confirmed via a raw stty+head
- * capture bypassing this file entirely - not this code's bug, and not fixed
- * by removing other USB traffic or by data volume alone). 921600 remains
- * fine from a PC directly. See docs/RASPBERRY_PI_V1.md's failure modes.
+ * Default is 230400. It has come down twice from 921600, both times driven by
+ * measurement on this Pi 2's ch341 link (921600 is fine from a PC, so this is
+ * bridge- and host-specific, not a general limit). Crucially, checking only
+ * that a line has 11 comma-separated fields is NOT enough to call it good:
+ * at 460800 every line still arrived with 5-19 of its 128 values missing
+ * while looking structurally fine. Validate the value count against the `len`
+ * field, as pc/csi/parse.py does. See docs/RASPBERRY_PI_V1.md's failure modes.
  *
  * See docs/RASPBERRY_PI_V1.md, "Serial logger".
  */
@@ -202,7 +204,7 @@ static void usage(const char *argv0)
             "  -p  serial device      (default /dev/esp32-rx)\n"
             "  -o  output csv         (default csi.csv)\n"
             "  -n  node id to keep    (default RX1)\n"
-            "  -b  baud rate          (default 460800; must match the RX firmware's\n"
+            "  -b  baud rate          (default 230400; must match the RX firmware's\n"
             "                          UART_BAUD in esp32/rx/main/config.h)\n",
             argv0);
 }
@@ -212,7 +214,7 @@ int main(int argc, char **argv)
     const char *port = "/dev/esp32-rx";
     const char *out = "csi.csv";
     const char *node_id = "RX1";
-    speed_t speed = B460800;   /* matches esp32/rx/main/config.h's UART_BAUD */
+    speed_t speed = B230400;   /* matches esp32/rx/main/config.h UART_BAUD */
 
     int opt;
     while ((opt = getopt(argc, argv, "p:o:n:b:h")) != -1) {
